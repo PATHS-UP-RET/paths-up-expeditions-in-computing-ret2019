@@ -1,4 +1,13 @@
 """
+    Remote PPG Algorithm and GUI. Measures a photoplethysmogram in
+    realtime from a webcame and allows direct comparison to ppg 
+    obtained from "ground truth" finger pulse sensor.
+
+    Written by Jimmy Newland as part of Rice University 
+    research experience for teachers, summer 2019.
+
+    http://jimmynewland.com
+    newton@jayfox.net
 
 """
 # OpenCV for camera access and frame reading
