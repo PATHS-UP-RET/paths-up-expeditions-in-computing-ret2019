@@ -1,7 +1,7 @@
 """
-    Remote PPG Algorithm and GUI. Measures a photoplethysmogram in
-    realtime from a webcame and allows direct comparison to ppg 
-    obtained from "ground truth" finger pulse sensor.
+    Remote PPG Algorithm and GUI. Measures a photoplethysmogram 
+    in realtime from a webcame and allows direct comparison to 
+    ppg obtained from "ground truth" finger pulse sensor.
 
     Written by Jimmy Newland as part of Rice University 
     research experience for teachers, summer 2019.
@@ -18,6 +18,7 @@ import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
 import numpy as np
 from scipy import fftpack
+import pyqtgraph.console
 
 # Heartrate analysis package
 import heartpy as hp
@@ -46,12 +47,15 @@ amped_baudrate = 115200
 amped_serial_timeout = 1
 now = datetime.now()
 
-ser = serial.Serial(amped_comport, amped_baudrate, timeout=amped_serial_timeout)    # open serial port
+ser = serial.Serial(amped_comport, amped_baudrate, \
+    timeout=amped_serial_timeout)    # open serial port
 ## end PS Setup
 
 ## Qt GUI Setup
 pg.mkQApp()
 win = pg.GraphicsLayoutWidget()
+camPen = pg.mkPen(width=10, color='y')
+psPen = pg.mkPen(width=10,color='g')
 win.setWindowTitle('Remote PPG')
 # end Qt Setup
 
@@ -63,21 +67,22 @@ ret, frame = cap.read()
 h = frame.shape[0] # number of columns
 w = frame.shape[1] # number of rows
 aspect = h/w
+## end OpenCV
 
 #### GUI Setup
 ## Plot for image
-imgPlot = win.addPlot()
+imgPlot = win.addPlot(colspan=2)
 imgPlot.getViewBox().setAspectLocked(True)
 win.nextRow()
-## end OpenCV
 
 ## Plot for camera intensity
 camPlot = win.addPlot()
-fftPlot = win.addPlot()
+camBPMPlot = win.addPlot()
 win.nextRow()
 
 ## Plot for pulse sensor intensity
 psPlot = win.addPlot()
+psBPMPlot = win.addPlot()
 
 # ImageItem box for displaying image data
 img = pg.ImageItem()
@@ -95,36 +100,36 @@ fs = 100
 
 # Initalize
 camData = np.random.normal(size=100)
+camBPMData = np.zeros(100)
+
 psData = np.random.normal(size=100)
-fftData = np.random.normal(size=100)
+psBPMData = np.zeros(100)
 
 camPlot.getAxis('bottom').setStyle(showValues=False)
 camPlot.getAxis('left').setStyle(showValues=False)
-camPlot.getAxis('bottom').setPen(0,0,0)
-camPlot.getAxis('left').setPen(0,0,0)
 
+camBPMPlot.getAxis('bottom').setStyle(showValues=False)
+camBPMPlot.setLabel('left','Cam BPM')
+
+psBPMPlot.getAxis('bottom').setStyle(showValues=False)
+psBPMPlot.setLabel('left','PS BPM')
+
+# Used linspace instead of arange due to spacing errors
 t = np.linspace(start=0,stop=100*1./fs,num=100)
 
-camCurve = camPlot.plot(t, camData, pen=(255,240,0),name="Camera")
-camPlot.setLabel('left','Raw')
+camCurve = camPlot.plot(t, camData, pen=camPen,name="Camera")
+camPlot.setLabel('left','Cam Signal')
 
-fftCurve = fftPlot.plot(fftData)
-fftPlot.setLabel('left','Filtered')
-fftPlot.getAxis('bottom').setStyle(showValues=False)
-fftPlot.getAxis('left').setStyle(showValues=False)
-fftPlot.getAxis('bottom').setPen(0,0,0)
-fftPlot.getAxis('left').setPen(0,0,0)
+camBPMCurve = camBPMPlot.plot(t,camBPMData,pen=camPen,name="Cam BPM")
 
-psCurve = psPlot.plot(t, psData, pen=(0,255,0),name="Pulse Sensor")
+psCurve = psPlot.plot(t, psData, pen=psPen,name="Pulse Sensor")
+
+psBPMCurve = psBPMPlot.plot(t, psBPMData, pen=psPen,name="PS BPM")
+
 psPlot.getAxis('bottom').setStyle(showValues=False)
 psPlot.getAxis('left').setStyle(showValues=False)
-psPlot.getAxis('bottom').setPen(0,0,0)
-psPlot.getAxis('left').setPen(0,0,0)
-#psPlot.setLabel('left','intensity')
+psPlot.setLabel('left','PS Signal')
 ptr = 0
-
-# Order of butterworth filter fit
-order = 1
 
 ret, frame = cap.read() # gets one frame from the webcam
 
@@ -140,7 +145,8 @@ middleCol = int(numCols/2)
 boxH = int(numRows*0.15)
 boxW = int(numCols*0.15)
 
-box = pg.RectROI( (middleRow-boxH/2,middleCol-boxW/2), (boxH,boxW), pen=9, sideScalers=True, centered=True)
+box = pg.RectROI( (middleRow-boxH/2,middleCol-boxW/2), \
+    (boxH,boxW), pen=9, sideScalers=True, centered=True)
 imgPlot.addItem(box)
 
 def get_data_ps():
@@ -183,40 +189,20 @@ def save_to_csv(csvFileName, data):
         f.write(row)
         f.write("\n") 
 
-def butter_bandpass(lowcut, highcut, fs, order=order):
-    nyq = 0.5 * fs
-    low = lowcut / nyq
-    high = highcut / nyq
-    b, a = butter(order, [low, high], btype='band', analog=True)
-    return b, a
-
-def butter_bandpass_filter(data, lowcut, highcut, fs, order=order):
-    b, a = butter_bandpass(lowcut, highcut, fs, order=order)
-    y = lfilter(b, a, data)
-    return y
-
 def update():
     global camData, camCurve, ptr, t, filename
+    # Grab all the data from this frame
     image, signal = grabCam()
     data_ps = get_data_ps()
 
-    #print(data_ps)
-    
-    # https://github.com/fxthomas/pg-examples/blob/master/linked_rois.py
-    # PyQtGraph and OpenCV don't agree on whether pixels are row-major or vice versa.
-    image = image.T[:, ::-1]
+    ### get camera signal and subtract mean
+    #sig = camData - np.mean(camData)
 
-    img.setImage(image, autoLevels=True)
-
-    camData[:-1] = camData[1:]  # shift data in the array one sample left
-                            # (see also: np.roll)
-    camData[-1] = signal
-    
     ps_signal = data_ps['pulseWaveform']
     ps_bpm = data_ps['pulseRate']
 
     ### Python 2 vs Python 3 unicode encoding
-    # Need to track this bug down...
+    # Known issue
     if(isinstance(ps_signal,str)):
         ps_signal = int(ps_signal[:-1])
     else:
@@ -228,82 +214,68 @@ def update():
         ps_bpm = int(ps_bpm)
     ####
     
-    psData[:-1] = psData[1:]  # shift data in the array one sample left
-                            # (see also: np.roll)
-    psData[-1] = ps_signal
-
-    t[:-1] = t[1:]
-    t[-1] = (datetime.now() - start_time).total_seconds()
-    
-    ### get camera signal and perform FFT
-    # https://scipy-lectures.org/intro/scipy/auto_examples/plot_fftpack.html
-    sig = camData - np.mean(camData)
-    time_step = 0.1
-    period = 1
-    ############################################################
-    # Compute and plot the power
-    ###########################################################
-
-    # The FFT of the signal
-    sig_fft = fftpack.rfft(sig)
-
-    # And the power (sig_fft is of complex dtype)
-    power = np.abs(sig_fft)
-
-    # The corresponding frequencies
-    sample_freq = fftpack.fftfreq(sig.size, d=time_step)
-
-    # Find the peak frequency: we can focus on only the positive frequencies
-    pos_mask = np.where(sample_freq > 0)
-    freqs = sample_freq[pos_mask]
-    peak_freq = freqs[power[pos_mask].argmax()]
-
-    ############################################################
-    # Remove all the high frequencies
-    ############################################################
-    #
-    # We now remove all the high frequencies and transform back from
-    # frequencies to signal.
-
-    filtered_fft = sig_fft.copy()
-    filtered_fft[np.abs(sample_freq) > 1.2] = 0
-    filtered_fft[np.abs(sample_freq) < 0.5] = 0
-
-    filtered_sig = fftpack.irfft(filtered_fft)
-    ###
-
     ### heartpy
     # https://python-heart-rate-analysis-toolkit.readthedocs.io/en/latest/quickstart.html#basic-example
     # https://www.researchgate.net/publication/328654252_Analysing_Noisy_Driver_Physiology_Real-Time_Using_Off-the-Shelf_Sensors_Heart_Rate_Analysis_Software_from_the_Taking_the_Fast_Lane_Project
-    bpm = 0.0
+    cam_bpm = camBPMData[-1]
+    camSig = camData - np.mean(camData)
     try:
-        working_data, measures = hp.process(sig, 10.0)
+        working_data, measures = hp.process(camSig, 10.0)
     except BadSignalWarning:
         print("Bad signal")
     else:
         if(measures['bpm'] > 50 and measures['bpm'] < 120):
-            bpm = measures['bpm']
-        print(str(bpm)+'\t'+str(ps_bpm))
+            cam_bpm = measures['bpm']
     ### end HeartPy
 
-````# Package data to be saved to CSV.
-    single_record = {}
+    # https://github.com/fxthomas/pg-examples/blob/master/linked_rois.py
+    # PyQtGraph and OpenCV don't agree on whether pixels are row-major 
+    # or vice versa.
+    image = image.T[:, ::-1]
+    img.setImage(image, autoLevels=True)
+
+    camData[:-1] = camData[1:]  # shift data in the array one sample left
+                            # (see also: np.roll)
+    camData[-1] = signal
+
+    camBPMData[:-1] = camBPMData[1:]
+    camBPMData[:-1] = cam_bpm
+
+    psData[:-1] = psData[1:]  # shift data in the array one sample left
+                            # (see also: np.roll)
+    psData[-1] = ps_signal
+
+    psBPMData[:-1] = psBPMData[1:]
+    psBPMData[-1] = ps_bpm
+
+    t[:-1] = t[1:]
+    t[-1] = (datetime.now() - start_time).total_seconds()
     
+    # Package data to be saved to CSV.
+    single_record = {}
     single_record['ps_pulseRate'] = ps_bpm
     single_record['ps_pulseWaveform'] = ps_signal
-    single_record['cam_pulseWaveform'] = sig[-1]
-    single_record['cam_bpm'] = bpm
+    single_record['cam_pulseWaveform'] = camData[-1]
+    single_record['cam_bpm'] =cam_bpm
     single_record['time'] = t[-1]
-    
     save_to_csv(filename, single_record)
     ## end CSV
 
     ptr += 1
     camCurve.setData(camData)
     camCurve.setPos(ptr, 0)
-    fftCurve.setData(filtered_sig)
+
+    camBPMCurve.setData(camBPMData)
+    camBPMCurve.setPos(ptr, 0)
+
     psCurve.setData(psData)
-    psCurve.setPos(ptr,0)
+    psCurve.setPos(ptr, 0)
+
+    psBPMCurve.setData(psBPMData)
+    psBPMCurve.setPos(ptr, 0)
+
+    print("cam:"+str(np.median(camBPMData))+", ps:"+str(psBPMData[-1]))
+
 
 def grabCam():
     ret, frame = cap.read() # gets one frame from the webcam
