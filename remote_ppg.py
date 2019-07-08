@@ -47,6 +47,8 @@ amped_baudrate = 115200
 amped_serial_timeout = 1
 now = datetime.now()
 
+start_time = datetime.now()
+
 ser = serial.Serial(amped_comport, amped_baudrate, \
     timeout=amped_serial_timeout)    # open serial port
 ## end PS Setup
@@ -99,11 +101,11 @@ win.show() # Display the window
 fs = 100
 
 # Initalize
-camData = np.random.normal(size=100)
-camBPMData = np.zeros(100)
+camData = np.random.normal(size=50)
+camBPMData = np.zeros(50)
 
-psData = np.random.normal(size=100)
-psBPMData = np.zeros(100)
+psData = np.random.normal(size=50)
+psBPMData = np.zeros(50)
 
 camPlot.getAxis('bottom').setStyle(showValues=False)
 camPlot.getAxis('left').setStyle(showValues=False)
@@ -115,7 +117,8 @@ psBPMPlot.getAxis('bottom').setStyle(showValues=False)
 psBPMPlot.setLabel('left','PS BPM')
 
 # Used linspace instead of arange due to spacing errors
-t = np.linspace(start=0,stop=100*1./fs,num=100)
+t = np.linspace(start=0,stop=5.0,num=50)
+psTime = np.linspace(start=0,stop=5.0,num=50)
 
 camCurve = camPlot.plot(t, camData, pen=camPen,name="Camera")
 camPlot.setLabel('left','Cam Signal')
@@ -155,12 +158,11 @@ def get_data_ps():
     signal = -1
     serialRead = ser.readline()
     single_record = {}
-    read_time = datetime.now()    
     arduino_input = str(serialRead.strip())
 
     if arduino_input.count(",") == 2:
         bpm,ibi,signal = arduino_input.split(",")
-        elapsed = (read_time - now).total_seconds()
+        elapsed = (datetime.now() - start_time).total_seconds()
 
         single_record['pulseRate'] = bpm
         single_record['pulseWaveform'] = signal
@@ -176,7 +178,7 @@ def setup_csv(csvStr=None):
         csvFileName = 'ppg_'+now.strftime("%Y-%m-%d_%I_%M_%S")
     else:
         csvFileName = csvStr+'_'+now.strftime("%Y-%m-%d_%I_%M_%S")
-    headers = (u'time'+','+u'ps_waveform'+','+u'ps_bpm'+','+u'cam_waveform'+','+u'cam_bpm')
+    headers = (u'ps_time'+','+u'ps_waveform'+','+u'ps_bpm'+','+u'cam_time'+','+u'cam_waveform'+','+u'cam_bpm')
     with io.open(csvFileName + '.csv', 'w', newline='') as f:
         f.write(headers)
         f.write(u'\n')
@@ -184,8 +186,8 @@ def setup_csv(csvStr=None):
 
 def save_to_csv(csvFileName, data):
     with io.open(csvFileName + ".csv", "a", newline="") as f:
-        row = str(data['time'])+","+str(data['ps_pulseWaveform'])+","+str(data['ps_pulseRate'])+"," \
-             +str(data['cam_pulseWaveform'])+","+str(data['cam_bpm'])
+        row = str(data['ps_time'])+","+str(data['ps_pulseWaveform'])+","+str(data['ps_pulseRate'])+"," \
+             +str(data['cam_time'])+","+str(data['cam_pulseWaveform'])+","+str(data['cam_bpm'])
         f.write(row)
         f.write("\n") 
 
@@ -200,6 +202,7 @@ def update():
 
     ps_signal = data_ps['pulseWaveform']
     ps_bpm = data_ps['pulseRate']
+    ps_time = data_ps['time']
 
     ### Python 2 vs Python 3 unicode encoding
     # Known issue
@@ -250,14 +253,18 @@ def update():
 
     t[:-1] = t[1:]
     t[-1] = (datetime.now() - start_time).total_seconds()
+
+    psTime[:-1] = psTime[1:]
+    psTime[-1] = ps_time
     
     # Package data to be saved to CSV.
     single_record = {}
+    single_record['ps_time'] = ps_time
     single_record['ps_pulseRate'] = ps_bpm
     single_record['ps_pulseWaveform'] = ps_signal
     single_record['cam_pulseWaveform'] = camData[-1]
     single_record['cam_bpm'] =cam_bpm
-    single_record['time'] = t[-1]
+    single_record['cam_time'] = t[-1]
     save_to_csv(filename, single_record)
     ## end CSV
 
@@ -268,13 +275,14 @@ def update():
     camBPMCurve.setData(camBPMData)
     camBPMCurve.setPos(ptr, 0)
 
-    psCurve.setData(psData)
+    psCurve.setData(psTime,psData)
     psCurve.setPos(ptr, 0)
 
-    psBPMCurve.setData(psBPMData)
+    psBPMCurve.setData(psTime,psBPMData)
     psBPMCurve.setPos(ptr, 0)
 
-    print("cam:"+str(np.median(camBPMData))+", ps:"+str(psBPMData[-1]))
+    #print("cam:"+str(np.median(camBPMData))+", ps:"+str(psBPMData[-1]))
+    print(psTime[-1],t[-1])
 
 
 def grabCam():
@@ -311,7 +319,6 @@ timer.start(tickTime)
 
 ## Setup CSV File
 filename=setup_csv()
-start_time = datetime.now()
 
 ## Start Qt event loop unless running in interactive mode or using pyside.
 if __name__ == '__main__':
