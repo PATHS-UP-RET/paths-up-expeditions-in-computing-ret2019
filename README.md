@@ -21,7 +21,6 @@ an engaging and accessible format which could be run locally or remotely. Future
 would have the algorithm track the roi as the person moves in the frame. 
 
 Need to cite this?Use DOI: 10.13140/RG.2.2.12310.29765 
-https://www.researchgate.net/project/Real-time-remote-photoplethysmography-using-a-webcam-and-graphical-user-interface
 
 More information: https://wp.me/P3rYuP-6SAsqL
 
