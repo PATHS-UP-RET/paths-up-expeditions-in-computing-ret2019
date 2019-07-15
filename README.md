@@ -20,7 +20,7 @@ create a relatively simple and robust way to obtain, analyze, and visualize the 
 an engaging and accessible format which could be run locally or remotely. Future work 
 would have the algorithm track the roi as the person moves in the frame. 
 
-Need to cite this? DOI pending.
+Need to cite this?Use DOI: 10.13140/RG.2.2.12310.29765.
 
 More information: https://wp.me/P3rYuP-6SAsqL
 
