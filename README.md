@@ -20,7 +20,9 @@ create a relatively simple and robust way to obtain, analyze, and visualize the 
 an engaging and accessible format which could be run locally or remotely. Future work 
 would have the algorithm track the roi as the person moves in the frame. 
 
-Need to cite this?Use DOI: 10.13140/RG.2.2.12310.29765 
+This code is not approved for medical use and should be considered for research purposes only.
+
+Maintained by: J Newland newton@jayfox.net https://jimmynewland.com/
 
 More information: https://wp.me/P3rYuP-6SAsqL
 
